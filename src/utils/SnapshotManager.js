@@ -54,6 +54,7 @@ export class SnapshotManager {
             justify-content: center;
             gap: 10px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         `
         
         const clearAllBtn = document.createElement('button')
@@ -67,6 +68,23 @@ export class SnapshotManager {
         exportBtn.style.backgroundColor = '#9b59b6'
         exportBtn.addEventListener('click', () => this.exportSnapshots())
         controls.appendChild(exportBtn)
+        
+        // Add capture mode toggle
+        const videoOnlyBtn = document.createElement('button')
+        videoOnlyBtn.textContent = '📹 Video Only'
+        videoOnlyBtn.style.backgroundColor = '#3498db'
+        videoOnlyBtn.style.fontSize = '14px'
+        videoOnlyBtn.style.padding = '8px 12px'
+        videoOnlyBtn.addEventListener('click', () => this.takeVideoOnlySnapshot())
+        controls.appendChild(videoOnlyBtn)
+        
+        const overlayBtn = document.createElement('button')
+        overlayBtn.textContent = '🎯 With Overlay'
+        overlayBtn.style.backgroundColor = '#2ecc71'
+        overlayBtn.style.fontSize = '14px'
+        overlayBtn.style.padding = '8px 12px'
+        overlayBtn.addEventListener('click', () => this.takeSnapshot())
+        controls.appendChild(overlayBtn)
         
         container.appendChild(controls)
         
@@ -109,6 +127,67 @@ export class SnapshotManager {
         }
     }
     
+    // Method to take video-only snapshot
+    takeVideoOnlySnapshot() {
+        try {
+            if (!this.app.videoElement) {
+                this.app.updateStatus('Cannot take snapshot: video not ready', 'status warning')
+                return
+            }
+            
+            const timestamp = new Date()
+            const snapshot = {
+                id: Date.now(),
+                timestamp: timestamp.toISOString(),
+                displayTime: timestamp.toLocaleTimeString(),
+                image: this.captureVideoOnly(),
+                type: 'video-only', // Mark as video-only type
+                activeGesture: this.app.currentActiveGesture,
+                config: { ...this.app.config },
+                touches: Array.from(this.app.currentTouches || []),
+                debugInfo: 'Video-only snapshot - no overlay data',
+                performance: this.app.performanceMonitor.createReport(),
+                videoInfo: {
+                    width: this.app.videoElement.videoWidth,
+                    height: this.app.videoElement.videoHeight
+                }
+            }
+            
+            this.addSnapshot(snapshot)
+            this.displaySnapshot(snapshot)
+            
+            // Visual feedback with different color
+            this.app.flashGestureDetection('rgba(52, 152, 219, 0.4)') // Blue for video-only
+            this.app.updateStatus(`📹 Video snapshot #${this.snapshots.length} captured`, 'status success')
+            
+        } catch (error) {
+            console.error('Error taking video snapshot:', error)
+            this.app.updateStatus('Error taking video snapshot', 'status warning')
+        }
+    }
+    captureVideoOnly() {
+        try {
+            const tempCanvas = document.createElement('canvas')
+            const tempCtx = tempCanvas.getContext('2d')
+            
+            tempCanvas.width = this.app.videoElement.videoWidth || 640
+            tempCanvas.height = this.app.videoElement.videoHeight || 480
+            
+            // Mirror the video to match display
+            tempCtx.save()
+            tempCtx.scale(-1, 1)
+            tempCtx.translate(-tempCanvas.width, 0)
+            tempCtx.drawImage(this.app.videoElement, 0, 0, tempCanvas.width, tempCanvas.height)
+            tempCtx.restore()
+            
+            return tempCanvas.toDataURL('image/png', 0.8)
+            
+        } catch (error) {
+            console.error('Error capturing video only:', error)
+            return null
+        }
+    }
+    
     createSnapshotData() {
         const timestamp = new Date()
         const debugDiv = document.getElementById('debug-info')
@@ -117,7 +196,7 @@ export class SnapshotManager {
             id: Date.now(),
             timestamp: timestamp.toISOString(),
             displayTime: timestamp.toLocaleTimeString(),
-            image: this.app.canvasElement.toDataURL('image/png', 0.8),
+            image: this.captureVideoWithOverlay(), // Updated to capture video + overlay
             activeGesture: this.app.currentActiveGesture,
             config: { ...this.app.config },
             touches: Array.from(this.app.currentTouches || []),
@@ -127,6 +206,49 @@ export class SnapshotManager {
                 width: this.app.videoElement.videoWidth,
                 height: this.app.videoElement.videoHeight
             }
+        }
+    }
+    
+    captureVideoWithOverlay() {
+        try {
+            // Create a temporary canvas to combine video and overlay
+            const tempCanvas = document.createElement('canvas')
+            const tempCtx = tempCanvas.getContext('2d')
+            
+            // Set canvas size to match video
+            tempCanvas.width = this.app.videoElement.videoWidth || 640
+            tempCanvas.height = this.app.videoElement.videoHeight || 480
+            
+            // Save the current state
+            tempCtx.save()
+            
+            // Mirror the canvas to match the display
+            tempCtx.scale(-1, 1)
+            tempCtx.translate(-tempCanvas.width, 0)
+            
+            // Draw the video frame
+            tempCtx.drawImage(this.app.videoElement, 0, 0, tempCanvas.width, tempCanvas.height)
+            
+            // Restore to normal orientation for overlay
+            tempCtx.restore()
+            tempCtx.save()
+            
+            // Mirror again for the overlay to match
+            tempCtx.scale(-1, 1)
+            tempCtx.translate(-tempCanvas.width, 0)
+            
+            // Draw the canvas overlay (landmarks and debug info)
+            tempCtx.drawImage(this.app.canvasElement, 0, 0)
+            
+            tempCtx.restore()
+            
+            // Convert to data URL
+            return tempCanvas.toDataURL('image/png', 0.8)
+            
+        } catch (error) {
+            console.error('Error capturing video with overlay:', error)
+            // Fallback to just the canvas
+            return this.app.canvasElement.toDataURL('image/png', 0.8)
         }
     }
     
@@ -178,17 +300,23 @@ export class SnapshotManager {
     createSnapshotHTML(snapshot) {
         const performanceGrade = snapshot.performance.performanceGrade
         const gradeColor = this.getGradeColor(performanceGrade.grade)
+        const snapshotType = snapshot.type === 'video-only' ? '📹 Video Only' : '🎯 Video + Overlay'
+        const typeColor = snapshot.type === 'video-only' ? '#3498db' : '#2ecc71'
         
         return `
             <div class="snapshot-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <h4 style="margin: 0; color: #2c3e50;">Snapshot #${this.snapshots.length}</h4>
-                <span style="font-size: 12px; color: #666;">${snapshot.displayTime}</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                    <span style="font-size: 12px; color: #666;">${snapshot.displayTime}</span>
+                    <span style="font-size: 10px; color: ${typeColor}; font-weight: bold;">${snapshotType}</span>
+                </div>
             </div>
             
             <div class="snapshot-image" style="text-align: center; margin-bottom: 15px;">
                 <img src="${snapshot.image}" 
-                     style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 5px; cursor: pointer;"
-                     onclick="this.style.transform = this.style.transform ? '' : 'scale(1.5)'; this.style.zIndex = this.style.zIndex ? '' : '1000'; this.style.position = this.style.position ? '' : 'relative';">
+                     style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; transition: transform 0.2s;"
+                     onclick="this.style.transform = this.style.transform ? '' : 'scale(2)'; this.style.zIndex = this.style.zIndex ? '' : '1000'; this.style.position = this.style.position ? '' : 'fixed'; this.style.top = this.style.top ? '' : '50%'; this.style.left = this.style.left ? '' : '50%'; this.style.marginTop = this.style.marginTop ? '' : '-25vh'; this.style.marginLeft = this.style.marginLeft ? '' : '-25vw';"
+                     title="Click to zoom in/out">
             </div>
             
             <div class="snapshot-info" style="font-size: 12px; line-height: 1.4;">
@@ -214,17 +342,27 @@ export class SnapshotManager {
                     <strong>Active Touches:</strong> ${snapshot.touches.length}
                 </div>
                 
+                <div style="margin-bottom: 8px;">
+                    <strong>Video Resolution:</strong> ${snapshot.videoInfo.width}x${snapshot.videoInfo.height}
+                </div>
+                
+                ${snapshot.type !== 'video-only' ? `
                 <div class="debug-section" style="background: #f8f9fa; padding: 8px; border-radius: 4px; margin: 10px 0;">
                     <strong>Debug Info:</strong>
                     <div style="font-family: monospace; font-size: 10px; max-height: 60px; overflow-y: auto; margin-top: 5px;">
                         ${snapshot.debugInfo}
                     </div>
                 </div>
+                ` : '<div style="text-align: center; color: #666; font-style: italic; margin: 10px 0;">Clean video capture without overlay</div>'}
                 
                 <div class="controls" style="display: flex; gap: 8px; margin-top: 10px;">
                     <button class="analyze-btn" data-id="${snapshot.id}" 
                             style="flex: 1; padding: 5px; font-size: 11px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">
                         📊 Analyze
+                    </button>
+                    <button class="download-btn" data-id="${snapshot.id}"
+                            style="flex: 1; padding: 5px; font-size: 11px; background: #2ecc71; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                        💾 Download
                     </button>
                     <button class="delete-btn" data-id="${snapshot.id}"
                             style="flex: 1; padding: 5px; font-size: 11px; background: #e74c3c; color: white; border: none; border-radius: 3px; cursor: pointer;">
@@ -247,6 +385,34 @@ export class SnapshotManager {
         analyzeBtn.addEventListener('click', () => {
             this.analyzeSnapshot(snapshot)
         })
+        
+        // Download button
+        const downloadBtn = card.querySelector('.download-btn')
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', () => {
+                this.downloadSnapshot(snapshot)
+            })
+        }
+    }
+    
+    downloadSnapshot(snapshot) {
+        try {
+            // Create download link
+            const link = document.createElement('a')
+            link.href = snapshot.image
+            link.download = `gesture-snapshot-${snapshot.id}.png`
+            
+            // Trigger download
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            
+            this.app.updateStatus(`Downloaded snapshot #${snapshot.id}`, 'status success')
+            
+        } catch (error) {
+            console.error('Download error:', error)
+            this.app.updateStatus('Download failed', 'status warning')
+        }
     }
     
     deleteSnapshot(id) {

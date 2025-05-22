@@ -56,6 +56,11 @@ export class HandGestureTypingSystem {
         try {
             this.updateStatus('Initializing MediaPipe Hands...', 'status')
             
+            // Check if MediaPipe is available
+            if (typeof Hands === 'undefined') {
+                throw new Error('MediaPipe Hands not loaded. Please check your internet connection.')
+            }
+            
             // Initialize MediaPipe Hands
             this.hands = new Hands({
                 locateFile: (file) => {
@@ -71,8 +76,15 @@ export class HandGestureTypingSystem {
                 minTrackingConfidence: this.config.minTrackingConfidence
             })
             
-            // Set up results callback
-            this.hands.onResults((results) => this.onResults(results))
+            // Set up results callback with error handling
+            this.hands.onResults((results) => {
+                try {
+                    this.onResults(results)
+                } catch (error) {
+                    console.error('Error in onResults:', error)
+                    this.updateStatus(`Detection error: ${error.message}`, 'status warning')
+                }
+            })
             
             this.updateStatus('Starting camera...', 'status')
             
@@ -84,6 +96,7 @@ export class HandGestureTypingSystem {
                             await this.hands.send({ image: this.videoElement })
                         } catch (error) {
                             console.error('Error in hand detection:', error)
+                            this.updateStatus('Hand detection error - retrying...', 'status warning')
                         }
                     }
                 },
@@ -108,6 +121,14 @@ export class HandGestureTypingSystem {
         } catch (error) {
             console.error('Initialization error:', error)
             this.updateStatus(`❌ Initialization failed: ${error.message}`, 'status warning')
+            
+            // Provide helpful error messages
+            if (error.message.includes('MediaPipe')) {
+                this.updateStatus('❌ MediaPipe failed to load. Please check your internet connection and refresh the page.', 'status warning')
+            } else if (error.message.includes('camera')) {
+                this.updateStatus('❌ Camera access denied. Please allow camera permissions and refresh.', 'status warning')
+            }
+            
             throw error
         }
     }
@@ -216,30 +237,33 @@ export class HandGestureTypingSystem {
         if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             const landmarks = results.multiHandLandmarks[0]
             
-            try {
-                // Check hand stability
-                const handCenter = this.calculateHandCenter(landmarks)
-                const handIsStable = this.isHandStable(handCenter)
-                
-                // Draw hand landmarks and connections
-                this.drawHandVisualization(landmarks)
-                
-                // Debug visualization
-                if (this.debugMode) {
-                    this.visualizeDebugInfo(landmarks)
-                }
-                
-                // Detect gestures
-                if (this.detectionEnabled && handIsStable) {
-                    this.detectAndProcessGestures(landmarks)
-                }
-                
-                // Display performance info
-                this.displayPerformanceInfo(handIsStable)
-            } catch (error) {
-                console.warn('Error processing hand landmarks:', error)
-                this.updateStatus('⚠️ Hand landmark processing error', 'status warning')
+            // Validate landmarks before processing
+            if (!landmarks || !Array.isArray(landmarks) || landmarks.length < 21) {
+                console.warn('Invalid landmarks received:', landmarks)
+                this.updateStatus('⚠️ Invalid hand data received', 'status warning')
+                this.canvasCtx.restore()
+                return
             }
+            
+            // Check hand stability
+            const handCenter = this.calculateHandCenter(landmarks)
+            const handIsStable = this.isHandStable(handCenter)
+            
+            // Draw hand landmarks and connections
+            this.drawHandVisualization(landmarks)
+            
+            // Debug visualization
+            if (this.debugMode) {
+                this.visualizeDebugInfo(landmarks)
+            }
+            
+            // Detect gestures
+            if (this.detectionEnabled && handIsStable) {
+                this.detectAndProcessGestures(landmarks)
+            }
+            
+            // Display performance info
+            this.displayPerformanceInfo(handIsStable)
             
         } else {
             this.updateStatus('👋 Show your hand to the camera', 'status')
@@ -251,16 +275,21 @@ export class HandGestureTypingSystem {
     
     drawHandVisualization(landmarks) {
         try {
-            // Draw connections and landmarks using MediaPipe utilities
-            drawConnectors(this.canvasCtx, landmarks, HAND_CONNECTIONS, {
-                color: '#00FF00',
-                lineWidth: 2
-            })
-            drawLandmarks(this.canvasCtx, landmarks, {
-                color: '#FF0000',
-                lineWidth: 1,
-                radius: 3
-            })
+            // Draw connections and landmarks using global MediaPipe utilities
+            if (window.drawConnectors && window.drawLandmarks && window.HAND_CONNECTIONS) {
+                window.drawConnectors(this.canvasCtx, landmarks, window.HAND_CONNECTIONS, {
+                    color: '#00FF00',
+                    lineWidth: 2
+                })
+                window.drawLandmarks(this.canvasCtx, landmarks, {
+                    color: '#FF0000',
+                    lineWidth: 1,
+                    radius: 3
+                })
+            } else {
+                console.warn('MediaPipe drawing utilities not available, using fallback')
+                this.drawHandLandmarksFallback(landmarks)
+            }
         } catch (error) {
             console.warn('Error drawing with MediaPipe utilities:', error)
             // Fallback to manual drawing
@@ -363,23 +392,27 @@ export class HandGestureTypingSystem {
     }
     
     calculateHandCenter(landmarks) {
-        // Ensure wrist landmark exists
-        const wrist = landmarks[0];
-        
-        // Validate that the middle MCP landmark index is valid and exists
-        const middleMCPIndex = GESTURE_MAPPINGS.KNUCKLES.MIDDLE_MCP;
-        if (middleMCPIndex === undefined || !landmarks[middleMCPIndex]) {
-            // Fallback to using just the wrist if middle MCP is not available
-            return { x: wrist.x, y: wrist.y, z: wrist.z };
+        // Validate landmarks array
+        if (!landmarks || !Array.isArray(landmarks) || landmarks.length < 21) {
+            console.warn('Invalid landmarks array:', landmarks)
+            return { x: 0, y: 0, z: 0 }
         }
         
-        const middleMCP = landmarks[middleMCPIndex];
+        const wrist = landmarks[0]
+        const middleMCP = landmarks[GESTURE_MAPPINGS.KNUCKLES.MIDDLE_MCP]
+        
+        // Validate landmark objects
+        if (!wrist || !middleMCP || 
+            typeof wrist.x !== 'number' || typeof middleMCP.x !== 'number') {
+            console.warn('Invalid landmark structure:', { wrist, middleMCP })
+            return { x: 0, y: 0, z: 0 }
+        }
         
         return {
             x: (wrist.x + middleMCP.x) / 2,
             y: (wrist.y + middleMCP.y) / 2,
             z: (wrist.z + middleMCP.z) / 2
-        };
+        }
     }
     
     isHandStable(handCenter) {
