@@ -216,25 +216,30 @@ export class HandGestureTypingSystem {
         if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             const landmarks = results.multiHandLandmarks[0]
             
-            // Check hand stability
-            const handCenter = this.calculateHandCenter(landmarks)
-            const handIsStable = this.isHandStable(handCenter)
-            
-            // Draw hand landmarks and connections
-            this.drawHandVisualization(landmarks)
-            
-            // Debug visualization
-            if (this.debugMode) {
-                this.visualizeDebugInfo(landmarks)
+            try {
+                // Check hand stability
+                const handCenter = this.calculateHandCenter(landmarks)
+                const handIsStable = this.isHandStable(handCenter)
+                
+                // Draw hand landmarks and connections
+                this.drawHandVisualization(landmarks)
+                
+                // Debug visualization
+                if (this.debugMode) {
+                    this.visualizeDebugInfo(landmarks)
+                }
+                
+                // Detect gestures
+                if (this.detectionEnabled && handIsStable) {
+                    this.detectAndProcessGestures(landmarks)
+                }
+                
+                // Display performance info
+                this.displayPerformanceInfo(handIsStable)
+            } catch (error) {
+                console.warn('Error processing hand landmarks:', error)
+                this.updateStatus('⚠️ Hand landmark processing error', 'status warning')
             }
-            
-            // Detect gestures
-            if (this.detectionEnabled && handIsStable) {
-                this.detectAndProcessGestures(landmarks)
-            }
-            
-            // Display performance info
-            this.displayPerformanceInfo(handIsStable)
             
         } else {
             this.updateStatus('👋 Show your hand to the camera', 'status')
@@ -358,14 +363,23 @@ export class HandGestureTypingSystem {
     }
     
     calculateHandCenter(landmarks) {
-        const wrist = landmarks[0]
-        const middleMCP = landmarks[GESTURE_MAPPINGS.KNUCKLES.MIDDLE_MCP]
+        // Ensure wrist landmark exists
+        const wrist = landmarks[0];
+        
+        // Validate that the middle MCP landmark index is valid and exists
+        const middleMCPIndex = GESTURE_MAPPINGS.KNUCKLES.MIDDLE_MCP;
+        if (middleMCPIndex === undefined || !landmarks[middleMCPIndex]) {
+            // Fallback to using just the wrist if middle MCP is not available
+            return { x: wrist.x, y: wrist.y, z: wrist.z };
+        }
+        
+        const middleMCP = landmarks[middleMCPIndex];
         
         return {
             x: (wrist.x + middleMCP.x) / 2,
             y: (wrist.y + middleMCP.y) / 2,
             z: (wrist.z + middleMCP.z) / 2
-        }
+        };
     }
     
     isHandStable(handCenter) {
