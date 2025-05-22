@@ -1,6 +1,5 @@
 // src/components/HandGestureTypingSystem.js
 import { Hands } from '@mediapipe/hands'
-import { drawConnectors, drawLandmarks, HAND_CONNECTIONS } from '@mediapipe/drawing_utils'
 import { GESTURE_MAPPINGS } from '../config/gestureMappings.js'
 import { Camera } from '../utils/Camera.js'
 import { PerformanceMonitor } from '../utils/PerformanceMonitor.js'
@@ -46,6 +45,23 @@ export class HandGestureTypingSystem {
         this.currentActiveGesture = null
         this.lastDetectedGestures = {}
         this.currentTouches = new Set()
+        this.lastDebugTime = 0
+        
+        // Debug gesture mappings on startup
+        console.log('🚀 HandGestureTypingSystem initialized')
+        console.log('📊 Configuration:', this.config)
+        
+        // Log some key mappings for verification
+        import('../config/gestureMappings.js').then(module => {
+            const thumbRingMCP = `${module.FINGER_TIPS.THUMB}_${module.KNUCKLES.RING_MCP}`
+            const thumbPinkyMCP = `${module.FINGER_TIPS.THUMB}_${module.KNUCKLES.PINKY_MCP}`
+            
+            console.log('🗝️ Key Mappings Check:')
+            console.log(`  THUMB → RING_MCP: "${module.ALL_GESTURES[thumbRingMCP] || 'NOT FOUND'}"`)
+            console.log(`  THUMB → PINKY_MCP: "${module.ALL_GESTURES[thumbPinkyMCP] || 'NOT FOUND'}"`)
+            console.log(`  Total mappings: ${Object.keys(module.ALL_GESTURES).length}`)
+            console.log('🎯 System optimized to only detect mapped combinations!')
+        })
         
         // Initialize components
         this.setupEventListeners()
@@ -186,12 +202,23 @@ export class HandGestureTypingSystem {
             this.updateStatus(`Sensitivity: ${this.config.touchDistance.toFixed(3)}`, 'status')
         })
         
-        // Debug toggle button
+        // Debug toggle button with enhanced functionality
         const debugBtn = document.createElement('button')
         debugBtn.id = 'debug-btn'
         debugBtn.textContent = this.debugMode ? '🐛 Debug: ON' : '🐛 Debug: OFF'
         debugBtn.style.backgroundColor = this.debugMode ? '#27ae60' : '#e74c3c'
         debugBtn.addEventListener('click', () => this.toggleDebugMode())
+        
+        // Add double-click for gesture mapping debug
+        debugBtn.addEventListener('dblclick', () => {
+            console.log('🔍 Running gesture mapping debug...')
+            import('../config/gestureMappings.js').then(module => {
+                if (module.debugGestureMapping) {
+                    module.debugGestureMapping()
+                }
+            })
+        })
+        
         controlsDiv.appendChild(debugBtn)
         
         // Snapshot button
@@ -359,11 +386,20 @@ export class HandGestureTypingSystem {
     }
     
     detectAndProcessGestures(landmarks) {
+        // Enhanced debugging - only run detection every few frames to avoid spam
+        const now = Date.now()
+        if (!this.lastDebugTime || now - this.lastDebugTime > 1000) { // Debug every second
+            this.lastDebugTime = now
+            console.log('🔍 Running gesture detection with enhanced debugging...')
+        }
+        
         const detection = this.gestureDetector.detectGestures(landmarks)
         
         if (detection.gesture && detection.gesture !== this.currentActiveGesture) {
+            console.log(`🎯 Processing new gesture: ${detection.gesture} = "${detection.letter}"`)
             this.processNewGesture(detection)
         } else if (!detection.gesture && this.currentActiveGesture) {
+            console.log('🔄 Clearing current active gesture')
             this.currentActiveGesture = null
         }
         
@@ -463,12 +499,17 @@ export class HandGestureTypingSystem {
             container.insertBefore(debugDiv, this.keyMapGrid.parentElement)
         }
         
+        if (debugInfo.closePairs.length === 0) {
+            debugDiv.textContent = 'Debug Info: No mapped gestures within detection range'
+            return
+        }
+        
         const debugText = debugInfo.closePairs
-            .slice(0, 5) // Show top 5 closest pairs
-            .map(pair => `${pair.fingerName} → ${pair.knuckleName}: ${pair.distance.toFixed(4)} ${pair.hasMapping ? '✓' : '✗'}`)
+            .slice(0, 5) // Show top 5 closest mapped pairs
+            .map(pair => `${pair.fingerName} → ${pair.knuckleName}: ${pair.distance.toFixed(4)} = "${pair.letter}" ${pair.isActive ? '✓ ACTIVE' : ''}`)
             .join('\n')
         
-        debugDiv.textContent = `Debug Info (Top 5 closest pairs):\n${debugText}`
+        debugDiv.textContent = `Debug Info (Mapped gestures only):\n${debugText}`
     }
     
     flashGestureDetection(color = 'rgba(0, 255, 0, 0.3)') {
@@ -630,3 +671,4 @@ export class HandGestureTypingSystem {
         window.removeEventListener('beforeunload', this.destroy.bind(this))
     }
 }
+    

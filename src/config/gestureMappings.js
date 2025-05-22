@@ -29,32 +29,64 @@ export const KNUCKLES = {
 
 // Mapping between finger-to-knuckle touches and letters
 export const LETTER_MAPPINGS = {
+    // Thumb to index finger knuckles
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.INDEX_MCP}`]: 'a',
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.INDEX_PIP}`]: 'b',
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.INDEX_DIP}`]: 'c',
+    
+    // Thumb to middle finger knuckles
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.MIDDLE_MCP}`]: 'd',
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.MIDDLE_PIP}`]: 'e',
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.MIDDLE_DIP}`]: 'f',
-    [`${FINGER_TIPS.THUMB}_${KNUCKLES.RING_MCP}`]: 'g',
+    
+    // Thumb to ring finger knuckles
+    [`${FINGER_TIPS.THUMB}_${KNUCKLES.RING_MCP}`]: 'g',    // This should be 'g'
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.RING_PIP}`]: 'h',
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.RING_DIP}`]: 'i',
-    [`${FINGER_TIPS.THUMB}_${KNUCKLES.PINKY_MCP}`]: 'j',
+    
+    // Thumb to pinky finger knuckles
+    [`${FINGER_TIPS.THUMB}_${KNUCKLES.PINKY_MCP}`]: 'j',   // This should be 'j'
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.PINKY_PIP}`]: 'k',
     [`${FINGER_TIPS.THUMB}_${KNUCKLES.PINKY_DIP}`]: 'l',
+    
+    // Index finger to thumb knuckles
     [`${FINGER_TIPS.INDEX}_${KNUCKLES.THUMB_CMC}`]: 'm',
     [`${FINGER_TIPS.INDEX}_${KNUCKLES.THUMB_MCP}`]: 'n',
     [`${FINGER_TIPS.INDEX}_${KNUCKLES.THUMB_IP}`]: 'o',
-    [`${FINGER_TIPS.INDEX}_${KNUCKLES.MIDDLE_MCP}`]: 'p',
-    [`${FINGER_TIPS.INDEX}_${KNUCKLES.MIDDLE_PIP}`]: 'q',
-    [`${FINGER_TIPS.INDEX}_${KNUCKLES.MIDDLE_DIP}`]: 'r',
-    [`${FINGER_TIPS.INDEX}_${KNUCKLES.RING_MCP}`]: 's',
-    [`${FINGER_TIPS.INDEX}_${KNUCKLES.RING_PIP}`]: 't',
-    [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.THUMB_CMC}`]: 'u',
-    [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.THUMB_MCP}`]: 'v',
-    [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.THUMB_IP}`]: 'w',
-    [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.INDEX_MCP}`]: 'x',
-    [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.INDEX_PIP}`]: 'y',
-    [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.INDEX_DIP}`]: 'z'
+    
+    // // Index finger to other knuckles
+    // [`${FINGER_TIPS.INDEX}_${KNUCKLES.MIDDLE_MCP}`]: 'p',
+    // [`${FINGER_TIPS.INDEX}_${KNUCKLES.MIDDLE_PIP}`]: 'q',
+    // [`${FINGER_TIPS.INDEX}_${KNUCKLES.MIDDLE_DIP}`]: 'r',
+    // [`${FINGER_TIPS.INDEX}_${KNUCKLES.RING_MCP}`]: 's',
+    // [`${FINGER_TIPS.INDEX}_${KNUCKLES.RING_PIP}`]: 't',
+    
+    // // Middle finger mappings
+    // [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.THUMB_CMC}`]: 'u',
+    // [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.THUMB_MCP}`]: 'v',
+    // [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.THUMB_IP}`]: 'w',
+    // [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.INDEX_MCP}`]: 'x',
+    // [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.INDEX_PIP}`]: 'y',
+    // [`${FINGER_TIPS.MIDDLE}_${KNUCKLES.INDEX_DIP}`]: 'z'
+}
+
+// Let's also add a debugging function to verify mappings
+export function debugGestureMapping() {
+    console.log('🗺️ All Gesture Mappings:')
+    Object.entries(ALL_GESTURES).forEach(([gestureKey, letter]) => {
+        const [fingerTipIndex, knuckleIndex] = gestureKey.split('_')
+        const fingerName = getFingerName(parseInt(fingerTipIndex))
+        const knuckleName = getKnuckleName(parseInt(knuckleIndex))
+        console.log(`  ${fingerName} → ${knuckleName} = "${letter}" (${gestureKey})`)
+    })
+    
+    // Specific checks for the problematic gestures
+    const thumbRingMCP = getGestureKey(FINGER_TIPS.THUMB, KNUCKLES.RING_MCP)
+    const thumbPinkyMCP = getGestureKey(FINGER_TIPS.THUMB, KNUCKLES.PINKY_MCP)
+    
+    console.log(`\n🔍 Specific mappings:`)
+    console.log(`  THUMB → RING_MCP (${thumbRingMCP}) = "${getLetterForGesture(thumbRingMCP)}"`)
+    console.log(`  THUMB → PINKY_MCP (${thumbPinkyMCP}) = "${getLetterForGesture(thumbPinkyMCP)}"`)
 }
 
 // Special gestures for control functions
@@ -69,11 +101,11 @@ export const SPECIAL_MAPPINGS = {
     [`${FINGER_TIPS.PINKY}_${KNUCKLES.THUMB_MCP}`]: '-',
     [`${FINGER_TIPS.PINKY}_${KNUCKLES.THUMB_IP}`]: "'",
     
-    // Additional special characters using different combinations
-    [`${FINGER_TIPS.RING}_${KNUCKLES.INDEX_MCP}`]: ':',
-    [`${FINGER_TIPS.RING}_${KNUCKLES.INDEX_PIP}`]: ';',
-    [`${FINGER_TIPS.PINKY}_${KNUCKLES.INDEX_MCP}`]: '"',
-    [`${FINGER_TIPS.PINKY}_${KNUCKLES.INDEX_PIP}`]: '('
+    // // Additional special characters using different combinations
+    // [`${FINGER_TIPS.RING}_${KNUCKLES.INDEX_MCP}`]: ':',
+    // [`${FINGER_TIPS.RING}_${KNUCKLES.INDEX_PIP}`]: ';',
+    // [`${FINGER_TIPS.PINKY}_${KNUCKLES.INDEX_MCP}`]: '"',
+    // [`${FINGER_TIPS.PINKY}_${KNUCKLES.INDEX_PIP}`]: '('
 }
 
 // Combine all gesture mappings
