@@ -10,14 +10,23 @@ export class SnapshotManager {
     }
     
     initContainer() {
+        console.log('📦 Initializing snapshot container...')
+        
         // Create container if it doesn't exist
         this.container = document.getElementById('snapshot-container')
         if (!this.container) {
+            console.log('📦 Creating new snapshot container...')
             this.container = this.createContainer()
+        } else {
+            console.log('📦 Snapshot container already exists')
         }
+        
+        return this.container
     }
     
     createContainer() {
+        console.log('🏗️ Building snapshot container structure...')
+        
         const container = document.createElement('div')
         container.id = 'snapshot-container'
         container.style.cssText = `
@@ -60,13 +69,19 @@ export class SnapshotManager {
         const clearAllBtn = document.createElement('button')
         clearAllBtn.textContent = '🗑️ Clear All'
         clearAllBtn.style.backgroundColor = '#e74c3c'
-        clearAllBtn.addEventListener('click', () => this.clearAllSnapshots())
+        clearAllBtn.addEventListener('click', () => {
+            console.log('🗑️ Clearing all snapshots...')
+            this.clearAllSnapshots()
+        })
         controls.appendChild(clearAllBtn)
         
         const exportBtn = document.createElement('button')
         exportBtn.textContent = '💾 Export'
         exportBtn.style.backgroundColor = '#9b59b6'
-        exportBtn.addEventListener('click', () => this.exportSnapshots())
+        exportBtn.addEventListener('click', () => {
+            console.log('💾 Exporting snapshots...')
+            this.exportSnapshots()
+        })
         controls.appendChild(exportBtn)
         
         // Add capture mode toggle
@@ -75,7 +90,10 @@ export class SnapshotManager {
         videoOnlyBtn.style.backgroundColor = '#3498db'
         videoOnlyBtn.style.fontSize = '14px'
         videoOnlyBtn.style.padding = '8px 12px'
-        videoOnlyBtn.addEventListener('click', () => this.takeVideoOnlySnapshot())
+        videoOnlyBtn.addEventListener('click', () => {
+            console.log('📹 Taking video-only snapshot from container...')
+            this.takeVideoOnlySnapshot()
+        })
         controls.appendChild(videoOnlyBtn)
         
         const overlayBtn = document.createElement('button')
@@ -83,7 +101,10 @@ export class SnapshotManager {
         overlayBtn.style.backgroundColor = '#2ecc71'
         overlayBtn.style.fontSize = '14px'
         overlayBtn.style.padding = '8px 12px'
-        overlayBtn.addEventListener('click', () => this.takeSnapshot())
+        overlayBtn.addEventListener('click', () => {
+            console.log('🎯 Taking overlay snapshot from container...')
+            this.takeSnapshot()
+        })
         controls.appendChild(overlayBtn)
         
         container.appendChild(controls)
@@ -101,37 +122,77 @@ export class SnapshotManager {
         
         // Add to main container
         const mainContainer = document.querySelector('.container')
-        mainContainer.appendChild(container)
+        if (mainContainer) {
+            mainContainer.appendChild(container)
+            console.log('🏗️ Snapshot container added to main container')
+        } else {
+            console.error('🏗️ Main container not found!')
+            document.body.appendChild(container)
+            console.log('🏗️ Snapshot container added to body as fallback')
+        }
         
         return container
     }
     
     takeSnapshot() {
         try {
-            if (!this.app.hands || !this.app.videoElement) {
+            console.log('📸 Taking snapshot...')
+            
+            if (!this.app.handLandmarker || !this.app.videoElement) {
+                console.error('📸 Cannot take snapshot: system not ready')
                 this.app.updateStatus('Cannot take snapshot: system not ready', 'status warning')
                 return
             }
             
+            // Check if video is actually playing
+            if (this.app.videoElement.readyState < 2) {
+                console.error('📸 Cannot take snapshot: video not ready')
+                this.app.updateStatus('Cannot take snapshot: video not ready', 'status warning')
+                return
+            }
+            
+            console.log('📸 Creating snapshot data...')
             const snapshot = this.createSnapshotData()
+            
+            if (!snapshot.image || snapshot.image.length < 100) {
+                console.error('📸 Snapshot image is invalid or too small')
+                this.app.updateStatus('Snapshot capture failed', 'status warning')
+                return
+            }
+            
+            console.log('📸 Adding snapshot to collection...')
             this.addSnapshot(snapshot)
+            
+            console.log('📸 Displaying snapshot...')
             this.displaySnapshot(snapshot)
             
             // Visual feedback
             this.app.flashGestureDetection('rgba(138, 43, 226, 0.4)') // Purple for snapshot
             this.app.updateStatus(`📸 Snapshot #${this.snapshots.length} captured`, 'status success')
             
+            console.log('📸 Snapshot completed successfully')
+            
         } catch (error) {
-            console.error('Error taking snapshot:', error)
-            this.app.updateStatus('Error taking snapshot', 'status warning')
+            console.error('📸 Error taking snapshot:', error)
+            this.app.updateStatus(`Snapshot error: ${error.message}`, 'status warning')
         }
     }
     
     // Method to take video-only snapshot
     takeVideoOnlySnapshot() {
         try {
+            console.log('📹 Taking video-only snapshot...')
+            
             if (!this.app.videoElement) {
+                console.error('📹 Cannot take snapshot: video not ready')
                 this.app.updateStatus('Cannot take snapshot: video not ready', 'status warning')
+                return
+            }
+            
+            // Check if video is actually playing
+            if (this.app.videoElement.readyState < 2) {
+                console.error('📹 Cannot take snapshot: video not loaded')
+                this.app.updateStatus('Cannot take snapshot: video not loaded', 'status warning')
                 return
             }
             
@@ -153,6 +214,12 @@ export class SnapshotManager {
                 }
             }
             
+            if (!snapshot.image || snapshot.image.length < 100) {
+                console.error('📹 Video snapshot image is invalid')
+                this.app.updateStatus('Video snapshot capture failed', 'status warning')
+                return
+            }
+            
             this.addSnapshot(snapshot)
             this.displaySnapshot(snapshot)
             
@@ -160,9 +227,11 @@ export class SnapshotManager {
             this.app.flashGestureDetection('rgba(52, 152, 219, 0.4)') // Blue for video-only
             this.app.updateStatus(`📹 Video snapshot #${this.snapshots.length} captured`, 'status success')
             
+            console.log('📹 Video-only snapshot completed successfully')
+            
         } catch (error) {
-            console.error('Error taking video snapshot:', error)
-            this.app.updateStatus('Error taking video snapshot', 'status warning')
+            console.error('📹 Error taking video snapshot:', error)
+            this.app.updateStatus(`Video snapshot error: ${error.message}`, 'status warning')
         }
     }
     captureVideoOnly() {
@@ -219,6 +288,8 @@ export class SnapshotManager {
             tempCanvas.width = this.app.videoElement.videoWidth || 640
             tempCanvas.height = this.app.videoElement.videoHeight || 480
             
+            console.log('📸 Capturing video with overlay, canvas size:', tempCanvas.width, 'x', tempCanvas.height)
+            
             // Save the current state
             tempCtx.save()
             
@@ -238,18 +309,87 @@ export class SnapshotManager {
             tempCtx.translate(-tempCanvas.width, 0)
             
             // Draw the canvas overlay (landmarks and debug info)
-            tempCtx.drawImage(this.app.canvasElement, 0, 0)
+            if (this.app.canvasElement) {
+                tempCtx.drawImage(this.app.canvasElement, 0, 0)
+                console.log('📸 Added overlay to snapshot')
+            } else {
+                console.warn('📸 Canvas overlay not available')
+            }
             
             tempCtx.restore()
             
             // Convert to data URL
-            return tempCanvas.toDataURL('image/png', 0.8)
+            const dataUrl = tempCanvas.toDataURL('image/png', 0.8)
+            console.log('📸 Generated data URL, length:', dataUrl.length)
+            
+            return dataUrl
             
         } catch (error) {
             console.error('Error capturing video with overlay:', error)
             // Fallback to just the canvas
-            return this.app.canvasElement.toDataURL('image/png', 0.8)
+            if (this.app.canvasElement) {
+                console.log('📸 Falling back to canvas only')
+                return this.app.canvasElement.toDataURL('image/png', 0.8)
+            }
+            // Ultimate fallback - return a placeholder
+            return this.createErrorPlaceholder()
         }
+    }
+    
+    // Alternative method to capture just the video without overlay
+    captureVideoOnly() {
+        try {
+            const tempCanvas = document.createElement('canvas')
+            const tempCtx = tempCanvas.getContext('2d')
+            
+            tempCanvas.width = this.app.videoElement.videoWidth || 640
+            tempCanvas.height = this.app.videoElement.videoHeight || 480
+            
+            console.log('📹 Capturing video only, canvas size:', tempCanvas.width, 'x', tempCanvas.height)
+            
+            // Check if video is ready
+            if (!this.app.videoElement.videoWidth || !this.app.videoElement.videoHeight) {
+                console.warn('📹 Video not ready, dimensions are 0')
+                return this.createErrorPlaceholder()
+            }
+            
+            // Mirror the video to match display
+            tempCtx.save()
+            tempCtx.scale(-1, 1)
+            tempCtx.translate(-tempCanvas.width, 0)
+            tempCtx.drawImage(this.app.videoElement, 0, 0, tempCanvas.width, tempCanvas.height)
+            tempCtx.restore()
+            
+            const dataUrl = tempCanvas.toDataURL('image/png', 0.8)
+            console.log('📹 Generated video-only data URL, length:', dataUrl.length)
+            
+            return dataUrl
+            
+        } catch (error) {
+            console.error('Error capturing video only:', error)
+            return this.createErrorPlaceholder()
+        }
+    }
+    
+    createErrorPlaceholder() {
+        // Create a simple error placeholder image
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        canvas.width = 640
+        canvas.height = 480
+        
+        // Fill with gray background
+        ctx.fillStyle = '#f0f0f0'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        
+        // Add error text
+        ctx.fillStyle = '#666'
+        ctx.font = '24px Arial'
+        ctx.textAlign = 'center'
+        ctx.fillText('Snapshot Error', canvas.width / 2, canvas.height / 2 - 20)
+        ctx.fillText('Unable to capture video', canvas.width / 2, canvas.height / 2 + 20)
+        
+        return canvas.toDataURL('image/png', 0.8)
     }
     
     addSnapshot(snapshot) {
@@ -263,8 +403,20 @@ export class SnapshotManager {
     }
     
     displaySnapshot(snapshot) {
+        console.log('🖼️ Displaying snapshot:', snapshot.id)
+        
         const grid = document.getElementById('snapshots-grid')
-        if (!grid) return
+        if (!grid) {
+            console.error('🖼️ Snapshots grid not found, creating container...')
+            this.initContainer()
+            const newGrid = document.getElementById('snapshots-grid')
+            if (!newGrid) {
+                console.error('🖼️ Failed to create snapshots grid')
+                return
+            }
+        }
+        
+        const finalGrid = document.getElementById('snapshots-grid')
         
         const card = document.createElement('div')
         card.className = 'snapshot-card'
@@ -276,6 +428,7 @@ export class SnapshotManager {
             background: white;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             transition: transform 0.2s ease;
+            margin-bottom: 15px;
         `
         
         card.addEventListener('mouseenter', () => {
@@ -288,13 +441,23 @@ export class SnapshotManager {
             card.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)'
         })
         
+        console.log('🖼️ Creating snapshot HTML...')
         card.innerHTML = this.createSnapshotHTML(snapshot)
         
         // Add event listeners
+        console.log('🖼️ Adding event listeners...')
         this.addSnapshotEventListeners(card, snapshot)
         
         // Insert at the beginning
-        grid.insertBefore(card, grid.firstChild)
+        console.log('🖼️ Inserting card into grid...')
+        finalGrid.insertBefore(card, finalGrid.firstChild)
+        
+        console.log('🖼️ Snapshot displayed successfully')
+        
+        // Scroll the container into view
+        setTimeout(() => {
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }, 100)
     }
     
     createSnapshotHTML(snapshot) {

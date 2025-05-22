@@ -5,7 +5,12 @@ export default defineConfig({
     host: true, // Allow external connections
     port: 3000,
     https: false, // Set to true if you need HTTPS for camera access
-    open: true
+    open: true,
+    headers: {
+      // Required for SharedArrayBuffer (needed by MediaPipe WASM)
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin'
+    }
   },
   build: {
     target: 'esnext',
@@ -15,16 +20,19 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          mediapipe: ['@mediapipe/hands', '@mediapipe/drawing_utils']
+          mediapipe: ['@mediapipe/tasks-vision']
         }
       }
     }
   },
   optimizeDeps: {
-    include: ['@mediapipe/hands', '@mediapipe/drawing_utils']
+    include: ['@mediapipe/tasks-vision'],
+    exclude: [] // Don't exclude MediaPipe
   },
   define: {
     // Define any global constants if needed
     __DEV__: JSON.stringify(process.env.NODE_ENV === 'development')
-  }
+  },
+  // Handle WASM files properly
+  assetsInclude: ['**/*.wasm']
 })

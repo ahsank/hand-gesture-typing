@@ -22,8 +22,7 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
-    "@mediapipe/drawing_utils": "^0.3.1675466124",
-    "@mediapipe/hands": "^0.4.1675469240"
+    "@mediapipe/tasks-vision": "^0.10.21"
   },
   "engines": {
     "node": ">=16.0.0"

@@ -1,5 +1,5 @@
 // src/components/HandGestureTypingSystem.js
-import { Hands } from '@mediapipe/hands'
+import { HandLandmarker, FilesetResolver, DrawingUtils } from '@mediapipe/tasks-vision'
 import { GESTURE_MAPPINGS } from '../config/gestureMappings.js'
 import { Camera } from '../utils/Camera.js'
 import { PerformanceMonitor } from '../utils/PerformanceMonitor.js'
@@ -17,8 +17,10 @@ export class HandGestureTypingSystem {
         this.keyMapGrid = document.getElementById('key-map-grid')
         
         // MediaPipe components
-        this.hands = null
+        this.handLandmarker = null
+        this.vision = null
         this.camera = null
+        this.drawingUtils = null
         
         // Application state
         this.detectionEnabled = true
@@ -30,8 +32,8 @@ export class HandGestureTypingSystem {
             gestureTimeout: 200, // ms
             handSpeedThreshold: 0.02,
             maxNumHands: 1,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.3,
+            minHandDetectionConfidence: 0.5,
+            minHandPresenceConfidence: 0.5,
             minTrackingConfidence: 0.5
         }
         
@@ -48,7 +50,7 @@ export class HandGestureTypingSystem {
         this.lastDebugTime = 0
         
         // Debug gesture mappings on startup
-        console.log('🚀 HandGestureTypingSystem initialized')
+        console.log('🚀 HandGestureTypingSystem initialized with MediaPipe Tasks Vision')
         console.log('📊 Configuration:', this.config)
         
         // Log some key mappings for verification
@@ -70,46 +72,37 @@ export class HandGestureTypingSystem {
     
     async init() {
         try {
-            this.updateStatus('Initializing MediaPipe Hands...', 'status')
+            this.updateStatus('Initializing MediaPipe Tasks Vision...', 'status')
             
-            // Check if MediaPipe is available
-            if (typeof Hands === 'undefined') {
-                throw new Error('MediaPipe Hands not loaded. Please check your internet connection.')
-            }
+            // Initialize MediaPipe Vision
+            this.vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
+            )
             
-            // Initialize MediaPipe Hands
-            this.hands = new Hands({
-                locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-                }
-            })
-            
-            // Configure hand detection
-            this.hands.setOptions({
-                maxNumHands: this.config.maxNumHands,
-                modelComplexity: this.config.modelComplexity,
-                minDetectionConfidence: this.config.minDetectionConfidence,
+            // Create hand landmarker
+            this.handLandmarker = await HandLandmarker.createFromOptions(this.vision, {
+                baseOptions: {
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+                    delegate: "GPU"
+                },
+                runningMode: "VIDEO",
+                numHands: this.config.maxNumHands,
+                minHandDetectionConfidence: this.config.minHandDetectionConfidence,
+                minHandPresenceConfidence: this.config.minHandPresenceConfidence,
                 minTrackingConfidence: this.config.minTrackingConfidence
             })
             
-            // Set up results callback with error handling
-            this.hands.onResults((results) => {
-                try {
-                    this.onResults(results)
-                } catch (error) {
-                    console.error('Error in onResults:', error)
-                    this.updateStatus(`Detection error: ${error.message}`, 'status warning')
-                }
-            })
+            // Initialize drawing utils
+            this.drawingUtils = new DrawingUtils(this.canvasCtx)
             
             this.updateStatus('Starting camera...', 'status')
             
             // Initialize camera
             this.camera = new Camera(this.videoElement, {
                 onFrame: async () => {
-                    if (this.hands && this.detectionEnabled) {
+                    if (this.handLandmarker && this.detectionEnabled) {
                         try {
-                            await this.hands.send({ image: this.videoElement })
+                            await this.detectHands()
                         } catch (error) {
                             console.error('Error in hand detection:', error)
                             this.updateStatus('Hand detection error - retrying...', 'status warning')
@@ -139,14 +132,115 @@ export class HandGestureTypingSystem {
             this.updateStatus(`❌ Initialization failed: ${error.message}`, 'status warning')
             
             // Provide helpful error messages
-            if (error.message.includes('MediaPipe')) {
-                this.updateStatus('❌ MediaPipe failed to load. Please check your internet connection and refresh the page.', 'status warning')
+            if (error.message.includes('FilesetResolver')) {
+                this.updateStatus('❌ MediaPipe Tasks Vision failed to load. Please check your internet connection.', 'status warning')
             } else if (error.message.includes('camera')) {
                 this.updateStatus('❌ Camera access denied. Please allow camera permissions and refresh.', 'status warning')
             }
             
             throw error
         }
+    }
+    
+    async detectHands() {
+        if (!this.videoElement.videoWidth || !this.videoElement.videoHeight) {
+            return
+        }
+        
+        const startTimeMs = performance.now()
+        
+        // Detect hand landmarks
+        const results = this.handLandmarker.detectForVideo(this.videoElement, startTimeMs)
+        
+        // Process results
+        this.onResults(results)
+    }
+    
+    onResults(results) {
+        this.performanceMonitor.recordFrame()
+        
+        // Clear canvas
+        this.canvasCtx.save()
+        this.canvasCtx.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height)
+        
+        if (results.landmarks && results.landmarks.length > 0) {
+            const landmarks = results.landmarks[0] // Using first hand only
+            
+            // Validate landmarks before processing
+            if (!landmarks || !Array.isArray(landmarks) || landmarks.length < 21) {
+                console.warn('Invalid landmarks received:', landmarks)
+                this.updateStatus('⚠️ Invalid hand data received', 'status warning')
+                this.canvasCtx.restore()
+                return
+            }
+            
+            // Check hand stability
+            const handCenter = this.calculateHandCenter(landmarks)
+            const handIsStable = this.isHandStable(handCenter)
+            
+            // Draw hand landmarks and connections
+            this.drawHandVisualization(landmarks)
+            
+            // Debug visualization
+            if (this.debugMode) {
+                this.visualizeDebugInfo(landmarks)
+            }
+            
+            // Detect gestures
+            if (this.detectionEnabled && handIsStable) {
+                this.detectAndProcessGestures(landmarks)
+            }
+            
+            // Display performance info
+            this.displayPerformanceInfo(handIsStable)
+            
+        } else {
+            this.updateStatus('👋 Show your hand to the camera', 'status')
+            this.currentActiveGesture = null
+        }
+        
+        this.canvasCtx.restore()
+    }
+    
+    drawHandVisualization(landmarks) {
+        try {
+            // Use MediaPipe Tasks Vision drawing utilities
+            if (this.drawingUtils) {
+                // Draw hand connections
+                this.drawingUtils.drawConnectors(
+                    landmarks,
+                    HandLandmarker.HAND_CONNECTIONS,
+                    { color: '#00FF00', lineWidth: 2 }
+                )
+                
+                // Draw landmarks
+                this.drawingUtils.drawLandmarks(
+                    landmarks,
+                    { color: '#FF0000', lineWidth: 1, radius: 3 }
+                )
+            } else {
+                console.warn('Drawing utilities not available, using fallback')
+                this.drawHandLandmarksFallback(landmarks)
+            }
+        } catch (error) {
+            console.warn('Error drawing with MediaPipe utilities:', error)
+            // Fallback to manual drawing
+            this.drawHandLandmarksFallback(landmarks)
+        }
+    }
+    
+    drawHandLandmarksFallback(landmarks) {
+        // Fallback manual drawing
+        this.canvasCtx.fillStyle = '#FF0000'
+        landmarks.forEach(landmark => {
+            this.canvasCtx.beginPath()
+            this.canvasCtx.arc(
+                landmark.x * this.canvasElement.width,
+                landmark.y * this.canvasElement.height,
+                3, 0, 2 * Math.PI
+            )
+            this.canvasCtx.fill()
+        })
     }
     
     setupEventListeners() {
@@ -221,13 +315,82 @@ export class HandGestureTypingSystem {
         
         controlsDiv.appendChild(debugBtn)
         
-        // Snapshot button
+        // Snapshot button with dropdown
+        const snapshotContainer = document.createElement('div')
+        snapshotContainer.style.position = 'relative'
+        snapshotContainer.style.display = 'inline-block'
+        
         const snapshotBtn = document.createElement('button')
         snapshotBtn.id = 'snapshot-btn'
         snapshotBtn.textContent = '📸 Snapshot'
         snapshotBtn.style.backgroundColor = '#9b59b6'
         snapshotBtn.addEventListener('click', () => this.takeSnapshot())
-        controlsDiv.appendChild(snapshotBtn)
+        
+        // Add right-click or long-press for options
+        snapshotBtn.addEventListener('contextmenu', (e) => {
+            e.preventDefault()
+            this.showSnapshotMenu(e)
+        })
+        
+        snapshotContainer.appendChild(snapshotBtn)
+        controlsDiv.appendChild(snapshotContainer)
+    }
+    
+    showSnapshotMenu(event) {
+        // Create context menu for snapshot options
+        const menu = document.createElement('div')
+        menu.style.cssText = `
+            position: fixed;
+            top: ${event.clientY}px;
+            left: ${event.clientX}px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            z-index: 10000;
+            min-width: 150px;
+        `
+        
+        const option1 = document.createElement('div')
+        option1.textContent = '🎯 With Overlay'
+        option1.style.cssText = 'padding: 10px; cursor: pointer; border-bottom: 1px solid #eee;'
+        option1.addEventListener('click', () => {
+            this.takeSnapshot()
+            document.body.removeChild(menu)
+        })
+        
+        const option2 = document.createElement('div')
+        option2.textContent = '📹 Video Only'
+        option2.style.cssText = 'padding: 10px; cursor: pointer;'
+        option2.addEventListener('click', () => {
+            this.snapshotManager.takeVideoOnlySnapshot()
+            document.body.removeChild(menu)
+        })
+        
+        // Hover effects
+        ;[option1, option2].forEach(option => {
+            option.addEventListener('mouseenter', () => {
+                option.style.backgroundColor = '#f0f0f0'
+            })
+            option.addEventListener('mouseleave', () => {
+                option.style.backgroundColor = 'white'
+            })
+        })
+        
+        menu.appendChild(option1)
+        menu.appendChild(option2)
+        document.body.appendChild(menu)
+        
+        // Remove menu when clicking elsewhere
+        setTimeout(() => {
+            const removeMenu = (e) => {
+                if (!menu.contains(e.target)) {
+                    document.body.removeChild(menu)
+                    document.removeEventListener('click', removeMenu)
+                }
+            }
+            document.addEventListener('click', removeMenu)
+        }, 100)
     }
     
     initKeyMap() {
@@ -251,90 +414,6 @@ export class HandGestureTypingSystem {
             `
             
             this.keyMapGrid.appendChild(item)
-        })
-    }
-    
-    onResults(results) {
-        this.performanceMonitor.recordFrame()
-        
-        // Clear canvas
-        this.canvasCtx.save()
-        this.canvasCtx.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height)
-        
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            const landmarks = results.multiHandLandmarks[0]
-            
-            // Validate landmarks before processing
-            if (!landmarks || !Array.isArray(landmarks) || landmarks.length < 21) {
-                console.warn('Invalid landmarks received:', landmarks)
-                this.updateStatus('⚠️ Invalid hand data received', 'status warning')
-                this.canvasCtx.restore()
-                return
-            }
-            
-            // Check hand stability
-            const handCenter = this.calculateHandCenter(landmarks)
-            const handIsStable = this.isHandStable(handCenter)
-            
-            // Draw hand landmarks and connections
-            this.drawHandVisualization(landmarks)
-            
-            // Debug visualization
-            if (this.debugMode) {
-                this.visualizeDebugInfo(landmarks)
-            }
-            
-            // Detect gestures
-            if (this.detectionEnabled && handIsStable) {
-                this.detectAndProcessGestures(landmarks)
-            }
-            
-            // Display performance info
-            this.displayPerformanceInfo(handIsStable)
-            
-        } else {
-            this.updateStatus('👋 Show your hand to the camera', 'status')
-            this.currentActiveGesture = null
-        }
-        
-        this.canvasCtx.restore()
-    }
-    
-    drawHandVisualization(landmarks) {
-        try {
-            // Draw connections and landmarks using global MediaPipe utilities
-            if (window.drawConnectors && window.drawLandmarks && window.HAND_CONNECTIONS) {
-                window.drawConnectors(this.canvasCtx, landmarks, window.HAND_CONNECTIONS, {
-                    color: '#00FF00',
-                    lineWidth: 2
-                })
-                window.drawLandmarks(this.canvasCtx, landmarks, {
-                    color: '#FF0000',
-                    lineWidth: 1,
-                    radius: 3
-                })
-            } else {
-                console.warn('MediaPipe drawing utilities not available, using fallback')
-                this.drawHandLandmarksFallback(landmarks)
-            }
-        } catch (error) {
-            console.warn('Error drawing with MediaPipe utilities:', error)
-            // Fallback to manual drawing
-            this.drawHandLandmarksFallback(landmarks)
-        }
-    }
-    
-    drawHandLandmarksFallback(landmarks) {
-        // Fallback manual drawing
-        this.canvasCtx.fillStyle = '#FF0000'
-        landmarks.forEach(landmark => {
-            this.canvasCtx.beginPath()
-            this.canvasCtx.arc(
-                landmark.x * this.canvasElement.width,
-                landmark.y * this.canvasElement.height,
-                3, 0, 2 * Math.PI
-            )
-            this.canvasCtx.fill()
         })
     }
     
@@ -638,7 +717,13 @@ export class HandGestureTypingSystem {
     }
     
     takeSnapshot() {
-        this.snapshotManager.takeSnapshot()
+        console.log('🖱️ Snapshot button clicked')
+        try {
+            this.snapshotManager.takeSnapshot()
+        } catch (error) {
+            console.error('🖱️ Error in takeSnapshot method:', error)
+            this.updateStatus(`Snapshot failed: ${error.message}`, 'status warning')
+        }
     }
     
     pauseDetection() {
@@ -661,8 +746,8 @@ export class HandGestureTypingSystem {
             this.camera.stop()
         }
         
-        if (this.hands) {
-            this.hands.close()
+        if (this.handLandmarker) {
+            this.handLandmarker.close()
         }
         
         this.performanceMonitor.stop()
@@ -671,4 +756,3 @@ export class HandGestureTypingSystem {
         window.removeEventListener('beforeunload', this.destroy.bind(this))
     }
 }
-    

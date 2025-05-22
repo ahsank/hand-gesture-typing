@@ -168,6 +168,23 @@
             border-left-color: #27ae60;
         }
         
+        /* Loading indicator */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
         /* Responsive design */
         @media (max-width: 768px) {
             .container {
@@ -193,7 +210,10 @@
 <body>
     <div class="container">
         <h1>🤏 Hand Gesture Typing System</h1>
-        <p class="status" id="status">Initializing application...</p>
+        <p class="status" id="status">
+            <span class="loading"></span>
+            Initializing MediaPipe Tasks Vision...
+        </p>
         
         <div class="video-container">
             <video id="video-input" autoplay playsinline muted></video>
