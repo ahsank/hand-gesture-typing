@@ -464,7 +464,7 @@ export class HandGestureTypingSystem {
         }
     }
     
-    detectAndProcessGestures(landmarks) {
+    async detectAndProcessGestures(landmarks) {
         // Enhanced debugging - only run detection every few frames to avoid spam
         const now = Date.now()
         if (!this.lastDebugTime || now - this.lastDebugTime > 1000) { // Debug every second
@@ -472,18 +472,24 @@ export class HandGestureTypingSystem {
             console.log('🔍 Running gesture detection with enhanced debugging...')
         }
         
-        const detection = this.gestureDetector.detectGestures(landmarks)
-        
-        if (detection.gesture && detection.gesture !== this.currentActiveGesture) {
-            console.log(`🎯 Processing new gesture: ${detection.gesture} = "${detection.letter}"`)
-            this.processNewGesture(detection)
-        } else if (!detection.gesture && this.currentActiveGesture) {
-            console.log('🔄 Clearing current active gesture')
-            this.currentActiveGesture = null
+        try {
+            // Await the Promise returned by detectGestures
+            const detection = await this.gestureDetector.detectGestures(landmarks)
+            
+            // Check if detection contains valid gesture information
+            if (detection && detection.gesture && detection.gesture !== this.currentActiveGesture) {
+                console.log(`🎯 Processing new gesture: ${detection.gesture} = "${detection.letter}"`)
+                this.processNewGesture(detection)
+            } else if (detection && !detection.gesture && this.currentActiveGesture) {
+                console.log('🔄 Clearing current active gesture')
+                this.currentActiveGesture = null
+            }
+            
+            // Update current touches for snapshots
+            this.currentTouches = detection ? detection.touches : new Set()
+        } catch (error) {
+            console.error('Error in gesture detection:', error)
         }
-        
-        // Update current touches for snapshots
-        this.currentTouches = detection.touches
     }
     
     processNewGesture(detection) {

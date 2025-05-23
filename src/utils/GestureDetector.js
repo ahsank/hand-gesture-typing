@@ -12,8 +12,8 @@ import {
 export class GestureDetector {
     constructor(config = {}) {
         this.config = {
-            touchDistance: 0.04,
-            gestureTimeout: 200,
+            // touchDistance: 0.04,
+            // gestureTimeout: 200,
             ...config
         }
         
@@ -106,32 +106,36 @@ export class GestureDetector {
     }
     
     calculateDistancesMainThread(landmarks, fingerTips, knuckles) {
-        const results = []
-        
-        for (const fingerTipIndex of fingerTips) {
-            const fingerTip = landmarks[fingerTipIndex]
+        return new Promise((resolve) => {
+            const results = [];
             
-            for (const knuckleIndex of knuckles) {
-                const knuckle = landmarks[knuckleIndex]
+            for (const fingerTipIndex of fingerTips) {
+                const fingerTip = landmarks[fingerTipIndex];
                 
-                // Calculate 3D Euclidean distance
-                const dx = fingerTip.x - knuckle.x
-                const dy = fingerTip.y - knuckle.y
-                const dz = fingerTip.z - knuckle.z
-                const distance = Math.sqrt(dx*dx + dy*dy + dz*dz)
-                
-                if (distance < this.config.touchDistance * 2) {
-                    results.push({
-                        fingerTipIndex,
-                        knuckleIndex,
-                        distance,
-                        isTouch: distance < this.config.touchDistance
-                    })
+                for (const knuckleIndex of knuckles) {
+                    const knuckle = landmarks[knuckleIndex];
+                    
+                    // Calculate 3D Euclidean distance
+                    const dx = fingerTip.x - knuckle.x;
+                    const dy = fingerTip.y - knuckle.y;
+                    const dz = fingerTip.z - knuckle.z;
+                    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    
+                    if (distance < this.config.touchDistance * 2) {
+                        results.push({
+                            fingerTipIndex,
+                            knuckleIndex,
+                            distance,
+                            isTouch: distance < this.config.touchDistance
+                        });
+                    }
                 }
             }
-        }
-        
-        return results
+            
+            // To better mimic the worker's asynchronous behavior, 
+            // use setTimeout with 0ms delay to push to next event loop cycle
+            setTimeout(() => resolve(results), 0);
+        });
     }
     
     processDistanceResults(distanceResults, currentTime) {
@@ -153,8 +157,8 @@ export class GestureDetector {
             const gestureKey = getGestureKey(result.fingerTipIndex, result.knuckleIndex)
             
             // Check cooldown
-            const lastDetected = this.lastDetectedGestures.get(gestureKey)
-            if (!lastDetected || currentTime - lastDetected > this.config.gestureTimeout) {
+            //const lastDetected = this.lastDetectedGestures.get(gestureKey)
+            //if (!lastDetected || currentTime - lastDetected > this.config.gestureTimeout) {
                 if (result.distance < shortestDistance) {
                     bestGesture = {
                         gesture: gestureKey,
@@ -164,7 +168,7 @@ export class GestureDetector {
                     }
                     shortestDistance = result.distance
                 }
-            }
+            //}
         }
         
         // If we found a gesture, update its timestamp
