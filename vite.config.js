@@ -12,6 +12,7 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin'
     }
   },
+  base: '/hand-gesture-typing/',
   build: {
     target: 'esnext',
     outDir: 'dist',
