@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Gesture Typing System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 900px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .video-container {
+            position: relative;
+            margin-bottom: 20px;
+            border: 2px solid #3498db;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.2);
+        }
+        #video-input {
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1); /* Mirror the video */
+            display: block;
+        }
+        #canvas-output {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1); /* Mirror the canvas as well */
+            pointer-events: none;
+        }
+        .text-output {
+            width: 100%;
+            min-height: 120px;
+            border: 2px solid #ecf0f1;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 18px;
+            letter-spacing: 0.5px;
+            line-height: 1.6;
+            background: #f8f9fa;
+            transition: border-color 0.3s ease;
+            resize: vertical;
+        }
+        .text-output:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        button {
+            padding: 12px 20px;
+            border: none;
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+        button:hover {
+            background: linear-gradient(135deg, #2980b9, #1c5a7e);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .key-map {
+            width: 100%;
+            border: 2px solid #ecf0f1;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            background: #f8f9fa;
+        }
+        .key-map h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            text-align: center;
+        }
+        .key-map-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 12px;
+        }
+        .key-map-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            transition: all 0.2s ease;
+        }
+        .key-map-item:hover {
+            background: #e3f2fd;
+            border-color: #3498db;
+        }
+        .key-map-item span {
+            font-weight: bold;
+            margin-right: 15px;
+            min-width: 25px;
+            text-align: center;
+            background: #3498db;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+        .status {
+            color: #3498db;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 500;
+            padding: 10px;
+            background: #e8f4fd;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        .warning {
+            color: #e74c3c;
+            background: #fdf2f2;
+            border-left-color: #e74c3c;
+        }
+        .success {
+            color: #27ae60;
+            background: #f0f9f4;
+            border-left-color: #27ae60;
+        }
+        
+        /* Loading indicator */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                padding: 20px;
+            }
+            #video-input, #canvas-output {
+                width: 100%;
+                max-width: 480px;
+                height: auto;
+            }
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            button {
+                width: 100%;
+                max-width: 200px;
+            }
+        }
+    </style>
+  <script type="module" crossorigin src="/assets/index-I2pHz_rW.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/mediapipe-kb82tygh.js">
+</head>
+<body>
+    <div class="container">
+        <h1>🤏 Hand Gesture Typing System</h1>
+        <p class="status" id="status">
+            <span class="loading"></span>
+            Initializing MediaPipe Tasks Vision...
+        </p>
+        
+        <div class="video-container">
+            <video id="video-input" autoplay playsinline muted></video>
+            <canvas id="canvas-output"></canvas>
+        </div>
+        
+        <div class="text-output" id="text-output" contenteditable="true" placeholder="Your typed text will appear here..."></div>
+        
+        <div class="controls">
+            <button id="clear-btn">🗑️ Clear Text</button>
+            <button id="space-btn">␣ Space</button>
+            <button id="backspace-btn">⌫ Backspace</button>
+        </div>
+        
+        <div class="key-map">
+            <h3>📝 Finger-to-Knuckle Mapping</h3>
+            <p style="text-align: center; color: #666; margin-bottom: 20px;">
+                Touch your fingertips to different knuckles to type letters and symbols
+            </p>
+            <div class="key-map-grid" id="key-map-grid">
+                <!-- Will be populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
